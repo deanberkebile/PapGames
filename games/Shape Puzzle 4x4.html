@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shape Puzzle!</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: 'Trebuchet MS', 'Segoe UI', system-ui, sans-serif;
+    background: linear-gradient(to bottom, #87ceeb 0%, #2ea3c9 55%, #0d5d80 100%);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    padding: 24px 12px 60px;
+  }
+  .puzzle-app {
+    max-width: 1220px;
+    width: 100%;
+    background: rgba(255,255,255,0.14);
+    border-radius: 22px;
+    padding: 22px;
+    box-shadow: 0 10px 34px rgba(0,0,0,0.25);
+  }
+  .title {
+    text-align: center;
+    color: #fff;
+    text-shadow: 0 2px 6px rgba(0,0,0,0.35);
+    font-size: 2.1rem;
+    margin: 0 0 10px;
+  }
+  .instructions {
+    text-align: center;
+    color: #fff;
+    background: rgba(0,0,0,0.22);
+    border-radius: 14px;
+    padding: 10px 16px;
+    margin: 0 auto 20px;
+    max-width: 640px;
+    font-size: 0.95rem;
+    line-height: 1.5;
+  }
+  #board-wrap { display: flex; justify-content: center; margin-bottom: 24px; }
+  .game-area {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .board {
+    position: relative;
+    width: 480px;
+    height: 404px;
+    background: #7a4a26;
+    border: 11px solid #5c3417;
+    border-radius: 12px;
+    box-shadow: inset 0 0 16px rgba(0,0,0,0.45), 0 6px 16px rgba(0,0,0,0.3);
+  }
+  .slot {
+    position: absolute;
+    border: 2px dashed rgba(255,255,255,0.65);
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .piece-on-board { position: absolute; pointer-events: none; }
+  #pile-wrap { display: flex; justify-content: center; }
+  .pile {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    justify-content: center;
+    align-content: flex-start;
+    max-width: 640px;
+    min-height: 170px;
+    background: rgba(255,255,255,0.12);
+    border-radius: 16px;
+    padding: 16px;
+  }
+  .pile-piece {
+    width: 164px;
+    height: 145px;
+    cursor: pointer;
+    filter: drop-shadow(0 4px 6px rgba(0,0,0,0.35));
+    border-radius: 8px;
+  }
+  .pile-piece.selected {
+    outline: 4px solid #ff3b3b;
+    outline-offset: 2px;
+  }
+  .status-bar {
+    text-align: center;
+    color: #0a4a33;
+    background: #ffffff;
+    border-radius: 12px;
+    padding: 12px;
+    margin-top: 18px;
+    font-weight: bold;
+    font-size: 1.08rem;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.15);
+  }
+  .win-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,20,40,0.55);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 50;
+  }
+  .win-overlay.show { display: flex; }
+  .win-card {
+    background: #fff;
+    border-radius: 22px;
+    padding: 34px 44px;
+    text-align: center;
+    box-shadow: 0 14px 36px rgba(0,0,0,0.35);
+  }
+  .win-card h2 { margin: 0 0 6px; font-size: 1.8rem; }
+  .win-card button {
+    margin-top: 16px;
+    padding: 11px 26px;
+    font-size: 1.1rem;
+    border: none;
+    border-radius: 12px;
+    background: #1f8fc0;
+    color: #fff;
+    cursor: pointer;
+    font-weight: bold;
+  }
+  .win-card button:hover { background: #1a78a3; }
+
+  @media (orientation: landscape) {
+    .game-area {
+      flex-direction: row;
+      align-items: center;
+      justify-content: center;
+      gap: 22px;
+    }
+    #board-wrap { margin-bottom: 0; }
+    #pile-wrap { flex: 1 1 auto; display: flex; justify-content: center; }
+    .pile { max-width: 580px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="puzzle-app">
+  <h1 class="title">🔺 Shape Puzzle! 🔵</h1>
+  <div class="instructions">
+    <strong>Click</strong> a piece below to select it (it gets a red glow).
+    <strong>Click</strong> a square on the board to try placing it there!
+    Click the selected piece again, or use the ← / → arrow keys, to turn it.
+  </div>
+
+  <div class="game-area">
+  <div id="board-wrap">
+    <div id="board" class="board"></div>
+  </div>
+
+  <div id="pile-wrap">
+    <div id="pile" class="pile"></div>
+  </div>
+  </div>
+
+  <div id="status" class="status-bar">Pick a puzzle piece to start!</div>
+</div>
+
+<div id="win-screen" class="win-overlay">
+  <div class="win-card">
+    <h2>🎉 You did it! 🎉</h2>
+    <div>All the shapes came together!</div>
+    <button id="play-again">Play Again</button>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ---------------- Grid / piece geometry constants ---------------- */
+  const COLS = 4, ROWS = 4;
+  const CELL_W = 120, CELL_H = 101, TAB = 22;
+  const PIECE_W = CELL_W + 2 * TAB;   // 164
+  const PIECE_H = CELL_H + 2 * TAB;   // 145
+  const BOARD_W = CELL_W * COLS;      // 480
+  const BOARD_H = CELL_H * ROWS;      // 404
+
+  /* Fixed interlock pattern (not randomized — only shape-to-slot
+     assignment is randomized each game). +1 / -1 indicates which
+     direction the tab bump physically points across that boundary.
+     Generated as a checkerboard so the alternating tab/socket pattern
+     scales cleanly to any grid size. */
+  function buildTabs(rows, edgesPerRow) {
+    const tabs = [];
+    for (let i = 0; i < rows; i++) {
+      const row = [];
+      for (let j = 0; j < edgesPerRow; j++) row.push((i + j) % 2 === 0 ? 1 : -1);
+      tabs.push(row);
+    }
+    return tabs;
+  }
+  const V_TABS = buildTabs(ROWS, COLS - 1);  // [row][edge]  (between adjacent columns)
+  const H_TABS = buildTabs(ROWS - 1, COLS);  // [edge][col]  (between adjacent rows)
+
+  function edgesFor(r, c) {
+    const top    = r === 0        ? 'flat' : (H_TABS[r - 1][c] === 1 ? 'socket' : 'tab');
+    const bottom = r === ROWS - 1 ? 'flat' : (H_TABS[r][c]     === 1 ? 'tab'    : 'socket');
+    const left   = c === 0        ? 'flat' : (V_TABS[r][c - 1] === 1 ? 'socket' : 'tab');
+    const right  = c === COLS - 1 ? 'flat' : (V_TABS[r][c]     === 1 ? 'tab'    : 'socket');
+    return { top, right, bottom, left };
+  }
+
+  /* Cubic-bezier tab/socket bump along a straight edge segment.
+     nx,ny = outward unit normal for this edge. sign>0 = tab (bulges
+     outward), sign<0 = socket (dents inward). */
+  function bumpSegment(x0, y0, x1, y1, nx, ny, sign) {
+    const dx = x1 - x0, dy = y1 - y0;
+    const startA = { x: x0 + dx * 0.32, y: y0 + dy * 0.32 };
+    const endA   = { x: x0 + dx * 0.68, y: y0 + dy * 0.68 };
+    const amp = TAB * 0.85 * sign;
+    const c1 = { x: startA.x + nx * amp * 0.6, y: startA.y + ny * amp * 0.6 };
+    const peak1 = { x: x0 + dx * 0.42 + nx * amp, y: y0 + dy * 0.42 + ny * amp };
+    const peak2 = { x: x0 + dx * 0.58 + nx * amp, y: y0 + dy * 0.58 + ny * amp };
+    const c2 = { x: endA.x + nx * amp * 0.6, y: endA.y + ny * amp * 0.6 };
+    const midx = (peak1.x + peak2.x) / 2, midy = (peak1.y + peak2.y) / 2;
+    return `L ${startA.x} ${startA.y} ` +
+           `C ${c1.x} ${c1.y}, ${peak1.x} ${peak1.y}, ${midx} ${midy} ` +
+           `C ${peak2.x} ${peak2.y}, ${c2.x} ${c2.y}, ${endA.x} ${endA.y} ` +
+           `L ${x1} ${y1} `;
+  }
+
+  function edgeSeg(x0, y0, x1, y1, type, nx, ny) {
+    if (type === 'flat') return `L ${x1} ${y1} `;
+    return bumpSegment(x0, y0, x1, y1, nx, ny, type === 'tab' ? 1 : -1);
+  }
+
+  function piecePath(edges) {
+    const x0 = TAB, y0 = TAB, x1 = TAB + CELL_W, y1 = TAB + CELL_H;
+    let d = `M ${x0} ${y0} `;
+    d += edgeSeg(x0, y0, x1, y0, edges.top,    0, -1);
+    d += edgeSeg(x1, y0, x1, y1, edges.right,  1,  0);
+    d += edgeSeg(x1, y1, x0, y1, edges.bottom, 0,  1);
+    d += edgeSeg(x0, y1, x0, y0, edges.left,  -1,  0);
+    d += 'Z';
+    return d;
+  }
+
+  /* ---------------- Randomized colorful geometric-shape picture ----------------
+     A brand-new arrangement of shapes is generated fresh every game, at
+     board-global scale. Each piece simply clips+translates a window into
+     this single shared picture, so shapes that span a piece boundary line
+     up perfectly across neighboring pieces once correctly assembled. */
+  const PALETTE = ['#ef4444', '#f97316', '#facc15', '#22c55e', '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6'];
+  const SHAPE_TYPES = ['circle', 'square', 'rectangle', 'rhombus', 'triangle', 'line'];
+
+  function randRange(min, max) { return min + Math.random() * (max - min); }
+
+  function generateShapes() {
+    const count = 23 + Math.floor(Math.random() * 8); // 23-30 shapes per game (scaled for larger board)
+    const shapes = [];
+    for (let i = 0; i < count; i++) {
+      shapes.push({
+        type: SHAPE_TYPES[Math.floor(Math.random() * SHAPE_TYPES.length)],
+        cx: randRange(-10, BOARD_W + 10),
+        cy: randRange(-10, BOARD_H + 10),
+        size: randRange(46, 120),
+        rot: randRange(0, 360),
+        color: PALETTE[Math.floor(Math.random() * PALETTE.length)],
+        lineWidth: randRange(8, 16) // only used by 'line', precomputed so re-renders stay identical
+      });
+    }
+    return shapes;
+  }
+
+  function shapeMarkup(s) {
+    switch (s.type) {
+      case 'circle':
+        return `<circle cx="${s.cx}" cy="${s.cy}" r="${s.size / 2}" fill="${s.color}" stroke="#222" stroke-width="2.5" opacity="0.94"/>`;
+      case 'square':
+        return `<rect x="${-s.size / 2}" y="${-s.size / 2}" width="${s.size}" height="${s.size}" fill="${s.color}" stroke="#222" stroke-width="2.5" opacity="0.94" transform="translate(${s.cx},${s.cy}) rotate(${s.rot})"/>`;
+      case 'rectangle': {
+        const w = s.size * 1.5, h = s.size * 0.7;
+        return `<rect x="${-w / 2}" y="${-h / 2}" width="${w}" height="${h}" fill="${s.color}" stroke="#222" stroke-width="2.5" opacity="0.94" transform="translate(${s.cx},${s.cy}) rotate(${s.rot})"/>`;
+      }
+      case 'rhombus': {
+        const w = s.size, h = s.size * 0.7;
+        const pts = `0,${-h / 2} ${w / 2},0 0,${h / 2} ${-w / 2},0`;
+        return `<polygon points="${pts}" fill="${s.color}" stroke="#222" stroke-width="2.5" opacity="0.94" transform="translate(${s.cx},${s.cy}) rotate(${s.rot})"/>`;
+      }
+      case 'triangle': {
+        const h = s.size * 0.87;
+        const pts = `0,${-h / 2} ${s.size / 2},${h / 2} ${-s.size / 2},${h / 2}`;
+        return `<polygon points="${pts}" fill="${s.color}" stroke="#222" stroke-width="2.5" opacity="0.94" transform="translate(${s.cx},${s.cy}) rotate(${s.rot})"/>`;
+      }
+      case 'line':
+        return `<line x1="${-s.size / 2}" y1="0" x2="${s.size / 2}" y2="0" stroke="${s.color}" stroke-width="${s.lineWidth}" stroke-linecap="round" opacity="0.94" transform="translate(${s.cx},${s.cy}) rotate(${s.rot})"/>`;
+    }
+  }
+
+  function pictureMarkup(shapes) {
+    return `<rect x="0" y="0" width="${BOARD_W}" height="${BOARD_H}" fill="#fdfdf8"/>` +
+           shapes.map(shapeMarkup).join('');
+  }
+
+
+  /* ---------------- Per-piece SVG builder ---------------- */
+  function pieceSvg(homeSlot) {
+    const r = Math.floor(homeSlot / COLS), c = homeSlot % COLS;
+    const edges = edgesFor(r, c);
+    const path = piecePath(edges);
+    const tx = -(c * CELL_W - TAB);
+    const ty = -(r * CELL_H - TAB);
+    const clipId = `clip-${homeSlot}`;
+    return `<svg viewBox="0 0 ${PIECE_W} ${PIECE_H}" width="${PIECE_W}" height="${PIECE_H}" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <clipPath id="${clipId}"><path d="${path}"/></clipPath>
+      </defs>
+      <g clip-path="url(#${clipId})">
+        <g transform="translate(${tx},${ty})">
+          ${pictureMarkup(currentShapes)}
+        </g>
+      </g>
+      <path d="${path}" fill="none" stroke="rgba(0,0,0,0.18)" stroke-width="2"/>
+    </svg>`;
+  }
+
+  /* ---------------- Game state ---------------- */
+  let currentShapes = []; // the random shape composition for this game
+  let pieces = [];      // pieces[homeSlot] = { rotation, placed }
+  let pileOrder = [];   // array of homeSlot values, current pile display order
+  let selected = null;  // homeSlot of currently selected pile piece, or null
+  let placedCount = 0;
+
+  function shuffle(arr) {
+    const a = arr.slice();
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
+
+  function initGame() {
+    currentShapes = generateShapes();
+    pieces = [];
+    for (let slot = 0; slot < COLS * ROWS; slot++) {
+      pieces[slot] = {
+        rotation: [0, 90, 180, 270][Math.floor(Math.random() * 4)],
+        placed: false
+      };
+    }
+    pileOrder = shuffle(Array.from({ length: COLS * ROWS }, (_, i) => i));
+    selected = null;
+    placedCount = 0;
+    document.getElementById('win-screen').classList.remove('show');
+    setStatus('Pick a puzzle piece to start!');
+    renderBoard();
+    renderPile();
+    // Work around a first-paint glitch with freshly-inserted SVG clipPaths
+    requestAnimationFrame(() => requestAnimationFrame(() => { renderBoard(); renderPile(); }));
+  }
+
+  function setStatus(msg) { document.getElementById('status').textContent = msg; }
+
+  function renderBoard() {
+    const board = document.getElementById('board');
+    board.innerHTML = '';
+    for (let slot = 0; slot < COLS * ROWS; slot++) {
+      const r = Math.floor(slot / COLS), c = slot % COLS;
+      if (pieces[slot].placed) {
+        const wrap = document.createElement('div');
+        wrap.className = 'piece-on-board';
+        wrap.style.left = (c * CELL_W - TAB) + 'px';
+        wrap.style.top = (r * CELL_H - TAB) + 'px';
+        wrap.innerHTML = pieceSvg(slot);
+        board.appendChild(wrap);
+      } else {
+        const dash = document.createElement('div');
+        dash.className = 'slot';
+        dash.dataset.slot = slot;
+        dash.style.left = (c * CELL_W) + 'px';
+        dash.style.top = (r * CELL_H) + 'px';
+        dash.style.width = CELL_W + 'px';
+        dash.style.height = CELL_H + 'px';
+        board.appendChild(dash);
+      }
+    }
+  }
+
+  function renderPile() {
+    const pile = document.getElementById('pile');
+    pile.innerHTML = '';
+    pileOrder.forEach(slot => {
+      if (pieces[slot].placed) return;
+      const wrap = document.createElement('div');
+      wrap.className = 'pile-piece' + (selected === slot ? ' selected' : '');
+      wrap.dataset.slot = slot;
+      wrap.style.transform = `rotate(${pieces[slot].rotation}deg)`;
+      wrap.innerHTML = pieceSvg(slot);
+      pile.appendChild(wrap);
+    });
+  }
+
+  /* ---------------- Audio (Web Audio API only) ---------------- */
+  let audioCtx = null;
+  function ensureAudio() {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    return audioCtx;
+  }
+  function tone(ctx, freq, start, dur, peakGain) {
+    const osc = ctx.createOscillator(), gain = ctx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(peakGain, start + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + dur);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(start);
+    osc.stop(start + dur + 0.02);
+  }
+  function playChime() {
+    const ctx = ensureAudio();
+    [523.25, 659.25, 784.0, 1046.5].forEach((f, i) => tone(ctx, f, ctx.currentTime + i * 0.09, 0.18, 0.25));
+  }
+  function playThud() {
+    const ctx = ensureAudio();
+    const len = Math.floor(ctx.sampleRate * 0.18);
+    const buffer = ctx.createBuffer(1, len, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / len);
+    const noise = ctx.createBufferSource();
+    noise.buffer = buffer;
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 280;
+    const gain = ctx.createGain();
+    gain.gain.value = 0.95;
+    noise.connect(filter).connect(gain).connect(ctx.destination);
+    noise.start();
+  }
+  function playWinMelody() {
+    const ctx = ensureAudio();
+    const melody = [523.25, 587.33, 659.25, 698.46, 783.99, 880.0, 987.77, 1046.5,
+                     987.77, 880.0, 783.99, 698.46, 659.25, 587.33, 523.25, 659.25, 783.99];
+    melody.forEach((f, i) => tone(ctx, f, ctx.currentTime + i * 0.18, 0.17, 0.28));
+  }
+
+  /* ---------------- Interaction ---------------- */
+  function attemptPlace(targetSlot) {
+    const piece = pieces[selected];
+    if (selected === targetSlot && piece.rotation === 0) {
+      piece.placed = true;
+      placedCount++;
+      const wasSelected = selected;
+      selected = null;
+      setStatus('✨ That piece fits perfectly!');
+      playChime();
+      renderBoard();
+      renderPile();
+      if (placedCount === COLS * ROWS) {
+        setStatus('🎉 The shape picture is complete! 🎉');
+        setTimeout(() => {
+          playWinMelody();
+          document.getElementById('win-screen').classList.add('show');
+        }, 3600);
+      }
+    } else {
+      playThud();
+      let hint;
+      if (selected === targetSlot && piece.rotation !== 0) {
+        hint = 'Right spot but wrong turn! Click it again or use the arrow keys to turn it.';
+      } else {
+        hint = 'Not quite — try a different square!';
+      }
+      setStatus(`❌ ${hint}`);
+    }
+  }
+
+  function selectPiece(slot) {
+    selected = slot;
+    setStatus('Piece selected! Click a board square to place it, or click it again / use the arrow keys to turn it.');
+    renderPile();
+  }
+
+  function handlePileActivate(e) {
+    const el = e.target.closest('.pile-piece');
+    if (!el) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const slot = Number(el.dataset.slot);
+    if (selected === slot) {
+      rotatePiece(1); // clicking the already-selected piece turns it clockwise
+    } else {
+      selectPiece(slot);
+    }
+  }
+  document.getElementById('pile').addEventListener('click', handlePileActivate);
+  document.getElementById('pile').addEventListener('contextmenu', handlePileActivate);
+
+  function handleBoardActivate(e) {
+    const el = e.target.closest('.slot');
+    if (!el || selected === null) return;
+    e.preventDefault();
+    e.stopPropagation();
+    attemptPlace(Number(el.dataset.slot));
+  }
+  document.getElementById('board').addEventListener('click', handleBoardActivate);
+  document.getElementById('board').addEventListener('contextmenu', handleBoardActivate);
+
+  function rotatePiece(dir) {
+    // dir: 1 = clockwise (+90), -1 = counter-clockwise (-90)
+    if (selected === null) return;
+    pieces[selected].rotation = (pieces[selected].rotation + dir * 90 + 360) % 360;
+    renderPile();
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (selected === null) return;
+    if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      rotatePiece(1); // right arrow = clockwise
+    } else if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      rotatePiece(-1); // left arrow = counter-clockwise
+    }
+  });
+
+  document.getElementById('play-again').addEventListener('click', initGame);
+
+  initGame();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
+<title>Roll &amp; Add!</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --teal-dark:#0F3D3E;
+    --teal:#1B4B4F;
+    --cream:#FFF8E7;
+    --navy:#1F2B3D;
+    --coral:#FF6F59;
+    --gold:#FFC857;
+    --berry:#E85D75;
+    --mint:#6FCF97;
+  }
+
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+
+  html,body{
+    margin:0; padding:0; min-height:100%;
+    background: radial-gradient(circle at 50% -10%, #246163 0%, var(--teal) 45%, var(--teal-dark) 100%);
+    font-family:'Quicksand', sans-serif;
+    color:var(--navy);
+    overflow-x:hidden;
+  }
+
+  button{ font-family:inherit; border:none; cursor:pointer; }
+  button:focus-visible, .answer-btn:focus-visible{ outline:4px solid var(--gold); outline-offset:3px; }
+
+  .stage{
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:flex-start;
+    gap:clamp(10px,3vh,22px);
+    padding:clamp(14px,3vw,28px) clamp(14px,4vw,28px) clamp(24px,5vh,40px);
+    max-width:560px;
+    margin:0 auto;
+  }
+  .stage[hidden]{ display:none; }
+
+  .hud{
+    width:100%;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+  }
+  .pill{
+    font-family:'Baloo 2', sans-serif;
+    font-weight:700;
+    font-size:clamp(14px,3.6vw,18px);
+    background:var(--cream);
+    color:var(--navy);
+    padding:8px 16px;
+    border-radius:999px;
+    box-shadow:0 3px 0 rgba(0,0,0,0.12);
+  }
+  .score-pill{ color:#9a6b00; }
+
+  .mat{
+    position:relative;
+    width:100%;
+    background:linear-gradient(160deg,#7FD9A6,var(--mint));
+    border-radius:28px;
+    padding:clamp(20px,5vh,36px) clamp(10px,4vw,24px);
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    gap:clamp(14px,4vw,28px);
+    box-shadow:inset 0 0 0 6px rgba(255,255,255,0.25), 0 8px 0 rgba(0,0,0,0.15);
+    min-height:clamp(140px,30vh,200px);
+  }
+
+  .die{
+    width:clamp(86px,24vw,140px);
+    height:clamp(86px,24vw,140px);
+    filter:drop-shadow(0 8px 0 rgba(0,0,0,0.18));
+    transform-origin:50% 70%;
+  }
+  .die svg{ width:100%; height:100%; display:block; }
+  .die-body{ fill:var(--cream); stroke:var(--navy); stroke-width:3; }
+  .pip{ fill:var(--navy); }
+
+  .die.rolling{ animation:tumble 0.45s ease-in-out infinite; }
+  #die2.rolling{ animation-delay:0.07s; }
+  .die.landed{ animation:settle 0.45s ease-out; }
+
+  @keyframes tumble{
+    0%{ transform:rotate(0deg) translateY(0) scale(1); }
+    25%{ transform:rotate(-18deg) translateY(-10px) scale(1.04); }
+    50%{ transform:rotate(12deg) translateY(2px) scale(0.98); }
+    75%{ transform:rotate(-8deg) translateY(-6px) scale(1.02); }
+    100%{ transform:rotate(0deg) translateY(0) scale(1); }
+  }
+  @keyframes settle{
+    0%{ transform:scale(1.18) rotate(6deg); }
+    60%{ transform:scale(0.92) rotate(-3deg); }
+    100%{ transform:scale(1) rotate(0deg); }
+  }
+
+  .puff{
+    position:absolute;
+    bottom:14%;
+    width:46px; height:14px;
+    border-radius:50%;
+    background:rgba(255,255,255,0.6);
+    opacity:0;
+    pointer-events:none;
+  }
+  #puff1{ left:28%; }
+  #puff2{ right:28%; }
+  .puff.show{ animation:puffpop 0.5s ease-out forwards; }
+  @keyframes puffpop{
+    0%{ opacity:0.8; transform:scale(0.4); }
+    100%{ opacity:0; transform:scale(2.2); }
+  }
+
+  .prompt{
+    font-family:'Baloo 2', sans-serif;
+    font-weight:700;
+    font-size:clamp(20px,5.4vw,30px);
+    text-align:center;
+    color:var(--cream);
+    min-height:1.4em;
+  }
+
+  .answers{
+    width:100%;
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:clamp(10px,3vw,18px);
+  }
+  .answers[hidden]{ display:none; }
+
+  .answer-btn{
+    font-family:'Baloo 2', sans-serif;
+    font-weight:800;
+    font-size:clamp(30px,9vw,46px);
+    background:var(--cream);
+    color:var(--navy);
+    border-radius:22px;
+    padding:clamp(14px,4vh,22px) 0;
+    box-shadow:0 6px 0 rgba(0,0,0,0.18);
+    transition:transform 0.08s ease;
+  }
+  .answer-btn:active{ transform:translateY(3px); box-shadow:0 2px 0 rgba(0,0,0,0.18); }
+  .answer-btn:disabled{ cursor:default; }
+  .answer-btn.correct{
+    background:var(--gold);
+    animation:pop 0.4s ease;
+  }
+  .answer-btn.wrong{
+    background:var(--berry);
+    color:#fff;
+    animation:shake 0.4s ease;
+  }
+  @keyframes pop{
+    0%{ transform:scale(1); } 50%{ transform:scale(1.12); } 100%{ transform:scale(1); }
+  }
+  @keyframes shake{
+    0%,100%{ transform:translateX(0); }
+    20%{ transform:translateX(-8px); }
+    40%{ transform:translateX(8px); }
+    60%{ transform:translateX(-6px); }
+    80%{ transform:translateX(6px); }
+  }
+
+  .roll-btn{
+    font-family:'Baloo 2', sans-serif;
+    font-weight:700;
+    font-size:clamp(20px,5.6vw,28px);
+    background:var(--coral);
+    color:var(--cream);
+    padding:clamp(14px,3.6vh,20px) clamp(28px,8vw,48px);
+    border-radius:999px;
+    box-shadow:0 6px 0 rgba(0,0,0,0.2);
+    transition:transform 0.08s ease;
+  }
+  .roll-btn:active{ transform:translateY(3px); box-shadow:0 2px 0 rgba(0,0,0,0.2); }
+  .roll-btn.hidden{ display:none; }
+
+  .stars-burst{
+    position:absolute;
+    font-size:26px;
+    pointer-events:none;
+    animation:starUp 0.9s ease-out forwards;
+  }
+  @keyframes starUp{
+    0%{ opacity:1; transform:translateY(0) scale(0.6) rotate(0deg); }
+    100%{ opacity:0; transform:translateY(-90px) scale(1.2) rotate(40deg); }
+  }
+
+  .end-screen{
+    position:fixed; inset:0;
+    display:flex; align-items:center; justify-content:center;
+    background:radial-gradient(circle at 50% 20%, #246163, var(--teal-dark));
+    overflow:hidden;
+  }
+  .end-screen[hidden]{ display:none; }
+  .confetti{ position:absolute; inset:0; pointer-events:none; }
+  .confetti-piece{
+    position:absolute; top:-20px;
+    width:10px; height:16px;
+    opacity:0.95;
+    animation:fall linear forwards;
+  }
+  @keyframes fall{
+    0%{ transform:translateY(0) rotate(0deg); }
+    100%{ transform:translateY(110vh) rotate(540deg); }
+  }
+
+  .end-card{
+    position:relative;
+    background:var(--cream);
+    border-radius:28px;
+    padding:clamp(28px,6vw,44px);
+    text-align:center;
+    width:min(420px,86vw);
+    box-shadow:0 10px 0 rgba(0,0,0,0.18);
+  }
+  .end-title{
+    font-family:'Baloo 2', sans-serif;
+    font-weight:800;
+    font-size:clamp(32px,8vw,44px);
+    color:var(--coral);
+  }
+  .end-sub{
+    font-size:clamp(16px,4vw,20px);
+    margin-top:6px;
+  }
+  .end-score{
+    font-family:'Baloo 2', sans-serif;
+    font-weight:700;
+    font-size:clamp(18px,4.6vw,22px);
+    color:#9a6b00;
+    margin:18px 0 26px;
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    .die.rolling{ animation-duration:0.01s; animation-iteration-count:1; }
+    .answer-btn.correct, .answer-btn.wrong, .stars-burst, .confetti-piece{ animation-duration:0.01s; }
+  }
+</style>
+</head>
+<body>
+
+<div class="stage" id="stage">
+  <div class="hud">
+    <div class="pill round-pill" id="roundPill">Round 1 / 10</div>
+    <div class="pill score-pill">⭐ <span id="scoreVal">0</span></div>
+  </div>
+
+  <div class="mat" id="mat">
+    <div class="puff" id="puff1"></div>
+    <div class="die" id="die1"></div>
+    <div class="die" id="die2"></div>
+    <div class="puff" id="puff2"></div>
+  </div>
+
+  <div class="prompt" id="prompt">Tap Start the Game to begin!</div>
+
+  <div class="answers" id="answers" hidden></div>
+
+  <button class="roll-btn" id="rollBtn">🎲 Start the Game</button>
+</div>
+
+<div class="end-screen" id="endScreen" hidden>
+  <div class="confetti" id="confetti"></div>
+  <div class="end-card">
+    <div class="end-title">Hooray! 🎉</div>
+    <div class="end-sub">You rolled all 10 times!</div>
+    <div class="end-score" id="endScore">You found the total right away 0 times!</div>
+    <button class="roll-btn" id="playAgainBtn">Play Again</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---------- helpers ----------
+  function randInt(min, max){ return Math.floor(Math.random() * (max - min + 1)) + min; }
+  function shuffleArray(arr){
+    for(let i = arr.length - 1; i > 0; i--){
+      const j = Math.floor(Math.random() * (i + 1));
+      const tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp;
+    }
+    return arr;
+  }
+
+  // ---------- dice face SVG ----------
+  const PIP_POS = { TL:[25,25], TR:[75,25], ML:[25,50], MR:[75,50], BL:[25,75], BR:[75,75], C:[50,50] };
+  const FACES = {
+    1:['C'],
+    2:['TL','BR'],
+    3:['TL','C','BR'],
+    4:['TL','TR','BL','BR'],
+    5:['TL','TR','C','BL','BR'],
+    6:['TL','TR','ML','MR','BL','BR']
+  };
+  function diceFaceSVG(value){
+    const keys = FACES[value] || FACES[1];
+    let pips = '';
+    for(let i = 0; i < keys.length; i++){
+      const pos = PIP_POS[keys[i]];
+      pips += '<circle cx="' + pos[0] + '" cy="' + pos[1] + '" r="8" class="pip"></circle>';
+    }
+    return '<svg viewBox="0 0 100 100"><rect x="3" y="3" width="94" height="94" rx="18" class="die-body"></rect>' + pips + '</svg>';
+  }
+
+  // ---------- elements ----------
+  const stage = document.getElementById('stage');
+  const roundPill = document.getElementById('roundPill');
+  const scoreVal = document.getElementById('scoreVal');
+  const mat = document.getElementById('mat');
+  const die1El = document.getElementById('die1');
+  const die2El = document.getElementById('die2');
+  const puff1 = document.getElementById('puff1');
+  const puff2 = document.getElementById('puff2');
+  const promptEl = document.getElementById('prompt');
+  const answersEl = document.getElementById('answers');
+  const rollBtn = document.getElementById('rollBtn');
+  const endScreen = document.getElementById('endScreen');
+  const endScore = document.getElementById('endScore');
+  const confettiEl = document.getElementById('confetti');
+  const playAgainBtn = document.getElementById('playAgainBtn');
+
+  function renderDie(el, value){ el.innerHTML = diceFaceSVG(value); }
+  renderDie(die1El, 1);
+  renderDie(die2El, 1);
+
+  // ---------- audio ----------
+  let ctx = null;
+  function ensureAudio(){
+    if(!ctx){
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if(AC) ctx = new AC();
+    }
+    if(ctx && ctx.state === 'suspended') ctx.resume();
+  }
+  function tone(freq, start, dur, type, peak){
+    if(!ctx) return;
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = type || 'sine';
+    o.frequency.value = freq;
+    o.connect(g); g.connect(ctx.destination);
+    const t0 = ctx.currentTime + start;
+    g.gain.setValueAtTime(0, t0);
+    g.gain.linearRampToValueAtTime(peak || 0.25, t0 + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+    o.start(t0);
+    o.stop(t0 + dur + 0.05);
+  }
+  function playChime(){
+    ensureAudio();
+    tone(523.25, 0,   0.18, 'triangle', 0.3);
+    tone(659.25, 0.1, 0.18, 'triangle', 0.3);
+    tone(784.00, 0.2, 0.32, 'triangle', 0.32);
+  }
+  function playThud(){
+    ensureAudio();
+    if(!ctx) return;
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = 'sine';
+    o.connect(g); g.connect(ctx.destination);
+    const t0 = ctx.currentTime;
+    o.frequency.setValueAtTime(160, t0);
+    o.frequency.exponentialRampToValueAtTime(50, t0 + 0.25);
+    g.gain.setValueAtTime(0.35, t0);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.3);
+    o.start(t0); o.stop(t0 + 0.32);
+  }
+  function playRattle(){
+    ensureAudio();
+    for(let i = 0; i < 6; i++){
+      tone(300 + Math.random() * 400, i * 0.08, 0.05, 'square', 0.08);
+    }
+  }
+  function playThump(){
+    ensureAudio();
+    if(!ctx) return;
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = 'triangle';
+    o.connect(g); g.connect(ctx.destination);
+    const t0 = ctx.currentTime;
+    o.frequency.setValueAtTime(120, t0);
+    o.frequency.exponentialRampToValueAtTime(70, t0 + 0.12);
+    g.gain.setValueAtTime(0.25, t0);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.15);
+    o.start(t0); o.stop(t0 + 0.17);
+  }
+
+  // ---------- speech (helps non-readers) ----------
+  function speak(text){
+    if(!('speechSynthesis' in window)) return;
+    try{
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      u.rate = 0.95;
+      u.pitch = 1.05;
+      const voices = window.speechSynthesis.getVoices();
+      let v = null;
+      for(let i = 0; i < voices.length; i++){
+        if(voices[i].lang === 'en-US'){ v = voices[i]; break; }
+      }
+      if(!v){
+        for(let i = 0; i < voices.length; i++){
+          if(voices[i].lang && voices[i].lang.indexOf('en') === 0){ v = voices[i]; break; }
+        }
+      }
+      if(v) u.voice = v;
+      window.speechSynthesis.speak(u);
+    }catch(e){ /* speech not available, ignore */ }
+  }
+
+  // ---------- game state ----------
+  const TOTAL_ROUNDS = 10;
+  let round = 1;
+  let score = 0;
+  let busy = false;
+  let firstAttempt = true;
+  let correctSum = 0;
+
+  function generateOptions(correct){
+    const opts = [correct];
+    const deltas = shuffleArray([-4,-3,-2,-1,1,2,3,4]);
+    for(let i = 0; i < deltas.length && opts.length < 4; i++){
+      const cand = correct + deltas[i];
+      if(cand >= 2 && cand <= 12 && opts.indexOf(cand) === -1) opts.push(cand);
+    }
+    while(opts.length < 4){
+      const cand = randInt(2, 12);
+      if(opts.indexOf(cand) === -1) opts.push(cand);
+    }
+    return shuffleArray(opts);
+  }
+
+  function buildAnswers(correct){
+    answersEl.innerHTML = '';
+    const options = generateOptions(correct);
+    for(let i = 0; i < options.length; i++){
+      const val = options[i];
+      const btn = document.createElement('button');
+      btn.className = 'answer-btn';
+      btn.type = 'button';
+      btn.textContent = String(val);
+      btn.addEventListener('click', function(){ handleAnswer(btn, val, correct); });
+      btn.addEventListener('contextmenu', function(e){ e.preventDefault(); handleAnswer(btn, val, correct); });
+      answersEl.appendChild(btn);
+    }
+    answersEl.hidden = false;
+  }
+
+  function spawnPuff(el){
+    el.classList.remove('show');
+    void el.offsetWidth;
+    el.classList.add('show');
+  }
+
+  function spawnStars(){
+    const matRect = mat.getBoundingClientRect();
+    for(let i = 0; i < 7; i++){
+      const star = document.createElement('div');
+      star.className = 'stars-burst';
+      star.textContent = '⭐';
+      const x = matRect.left + matRect.width * (0.2 + Math.random() * 0.6);
+      const y = matRect.top + matRect.height * (0.3 + Math.random() * 0.4);
+      star.style.left = x + 'px';
+      star.style.top = y + 'px';
+      document.body.appendChild(star);
+      setTimeout(function(){ star.remove(); }, 950);
+    }
+  }
+
+  function handleAnswer(btn, val, correct){
+    if(busy) return;
+    if(val === correct){
+      busy = true;
+      btn.classList.add('correct');
+      playChime();
+      speak('Great job!');
+      spawnStars();
+      const children = answersEl.children;
+      for(let i = 0; i < children.length; i++) children[i].disabled = true;
+      if(firstAttempt){
+        score++;
+        scoreVal.textContent = String(score);
+      }
+      promptEl.textContent = 'Get ready for the next roll...';
+      setTimeout(nextRound, 3000);
+    } else {
+      btn.classList.add('wrong');
+      btn.disabled = true;
+      firstAttempt = false;
+      playThud();
+      speak('Try again!');
+    }
+  }
+
+  function rollDice(){
+    if(busy) return;
+    busy = true;
+    firstAttempt = true;
+    ensureAudio();
+    rollBtn.classList.add('hidden');
+    answersEl.hidden = true;
+    answersEl.innerHTML = '';
+    promptEl.textContent = '';
+    die1El.classList.remove('landed');
+    die2El.classList.remove('landed');
+    die1El.classList.add('rolling');
+    die2El.classList.add('rolling');
+    playRattle();
+
+    const tick1 = setInterval(function(){
+      renderDie(die1El, randInt(1,6));
+    }, 90);
+    const tick2 = setInterval(function(){
+      renderDie(die2El, randInt(1,6));
+    }, 90);
+
+    const d1Final = randInt(1,6);
+    const d2Final = randInt(1,6);
+
+    setTimeout(function(){
+      clearInterval(tick1);
+      die1El.classList.remove('rolling');
+      renderDie(die1El, d1Final);
+      die1El.classList.add('landed');
+      playThump();
+      spawnPuff(puff1);
+    }, 900);
+
+    setTimeout(function(){
+      clearInterval(tick2);
+      die2El.classList.remove('rolling');
+      renderDie(die2El, d2Final);
+      die2El.classList.add('landed');
+      playThump();
+      spawnPuff(puff2);
+
+      correctSum = d1Final + d2Final;
+      promptEl.textContent = "What's the total?";
+      speak("What's the total?");
+      buildAnswers(correctSum);
+      busy = false;
+    }, 1150);
+  }
+
+  function nextRound(){
+    round++;
+    if(round > TOTAL_ROUNDS){
+      showEndScreen();
+      return;
+    }
+    roundPill.textContent = 'Round ' + round + ' / ' + TOTAL_ROUNDS;
+    answersEl.hidden = true;
+    answersEl.innerHTML = '';
+    busy = false;
+    rollDice();
+  }
+
+  function spawnConfetti(){
+    const colors = ['#FF6F59','#FFC857','#6FCF97','#FFF8E7','#E85D75'];
+    confettiEl.innerHTML = '';
+    for(let i = 0; i < 70; i++){
+      const piece = document.createElement('div');
+      piece.className = 'confetti-piece';
+      piece.style.left = (Math.random() * 100) + '%';
+      piece.style.background = colors[randInt(0, colors.length - 1)];
+      piece.style.animationDuration = (2.4 + Math.random() * 1.8) + 's';
+      piece.style.animationDelay = (Math.random() * 0.6) + 's';
+      piece.style.borderRadius = (Math.random() < 0.5) ? '50%' : '2px';
+      confettiEl.appendChild(piece);
+    }
+  }
+
+  function showEndScreen(){
+    stage.hidden = true;
+    endScreen.hidden = false;
+    endScore.textContent = 'You found the total right away ' + score + ' out of ' + TOTAL_ROUNDS + ' times!';
+    spawnConfetti();
+    speak('Hooray! You finished all ten rolls!');
+  }
+
+  function resetGame(){
+    round = 1;
+    score = 0;
+    busy = false;
+    firstAttempt = true;
+    scoreVal.textContent = '0';
+    roundPill.textContent = 'Round 1 / 10';
+    promptEl.textContent = 'Tap Start the Game to begin!';
+    answersEl.hidden = true;
+    answersEl.innerHTML = '';
+    die1El.classList.remove('landed','rolling');
+    die2El.classList.remove('landed','rolling');
+    renderDie(die1El, 1);
+    renderDie(die2El, 1);
+    rollBtn.textContent = '🎲 Start the Game';
+    rollBtn.classList.remove('hidden');
+    endScreen.hidden = true;
+    stage.hidden = false;
+  }
+
+  // ---------- input wiring (click + right-click parity) ----------
+  document.addEventListener('contextmenu', function(e){ e.preventDefault(); }, false);
+
+  rollBtn.addEventListener('click', rollDice);
+  rollBtn.addEventListener('contextmenu', function(e){ e.preventDefault(); rollDice(); });
+
+  playAgainBtn.addEventListener('click', resetGame);
+  playAgainBtn.addEventListener('contextmenu', function(e){ e.preventDefault(); resetGame(); });
+
+  // warm up voice list in browsers that load it async
+  if('speechSynthesis' in window){
+    window.speechSynthesis.getVoices();
+    window.speechSynthesis.onvoiceschanged = function(){ window.speechSynthesis.getVoices(); };
+  }
+})();
+</script>
+</body>
+</html>

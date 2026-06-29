@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Princess Puzzle!</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Comic Sans MS', 'Chalkboard SE', cursive; background: linear-gradient(135deg, #f6d6e8 0%, #d8c4f0 100%); min-height: 100vh; }
+#app { padding: 16px; max-width: 900px; margin: 0 auto; }
+h1 { text-align: center; color: #7c2d6b; font-size: 38px; text-shadow: 2px 2px 0 rgba(255,255,255,0.7); margin-bottom: 10px; }
+#instructions { text-align: center; background: rgba(255,255,255,0.88); border-radius: 14px; padding: 10px 18px; margin-bottom: 14px; font-size: 17px; color: #333; line-height: 1.6; border: 2px solid #f3c6e0; }
+#instructions b { color: #c0392b; }
+#game-area { display: flex; flex-direction: column; gap: 18px; align-items: stretch; }
+#board-section { width: 100%; }
+#board-label { text-align: center; font-size: 24px; font-weight: bold; color: #7c2d6b; margin-bottom: 8px; }
+#puzzle-board { position: relative; background: #4a2c5e; border-radius: 16px; border: 8px solid #9b5fc4; box-shadow: 0 10px 32px rgba(0,0,0,0.45); overflow: visible; max-width: 700px; margin: 0 auto; }
+#pieces-section { width: 100%; }
+#pieces-label { text-align: center; font-size: 24px; font-weight: bold; color: #7c2d6b; margin-bottom: 8px; }
+#pieces-pile { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; background: rgba(255,255,255,0.65); border-radius: 18px; padding: 16px; border: 4px solid #9b5fc4; min-height: 200px; max-width: 900px; margin: 0 auto; }
+.piece-wrapper { cursor: pointer; transition: filter 0.15s; flex: 0 0 164px; width: 164px; height: 145px; display: flex; align-items: center; justify-content: center; }
+.piece-wrapper:hover { filter: brightness(1.08); }
+.piece-wrapper.selected { filter: drop-shadow(0 0 8px #e74c3c) drop-shadow(0 0 4px #e74c3c); }
+.piece-svg { display: block; width: 164px; height: 145px; }
+#status { text-align: center; margin-top: 14px; font-size: 19px; font-weight: bold; color: #7c2d6b; background: rgba(255,255,255,0.82); border-radius: 12px; padding: 10px; min-height: 40px; border: 2px solid #f3c6e0; }
+#win-screen { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.72); z-index: 100; align-items: center; justify-content: center; }
+#win-screen.show { display: flex; }
+#win-box { background: white; border-radius: 24px; padding: 36px 50px; text-align: center; border: 7px solid #ff6f91; box-shadow: 0 0 60px rgba(255,111,145,0.9); }
+#win-box h2 { font-size: 42px; color: #e74c3c; margin-bottom: 14px; }
+#win-box p { font-size: 20px; color: #2c3e50; margin-bottom: 22px; }
+#play-again { background: #e056a0; color: white; border: none; border-radius: 12px; padding: 16px 32px; font-size: 22px; cursor: pointer; font-family: inherit; }
+#play-again:hover { background: #c43e87; }
+.board-slot { position: absolute; cursor: pointer; }
+
+@media (orientation: landscape) {
+  #app { max-width: 1200px; }
+  #game-area { flex-direction: row; align-items: center; justify-content: center; gap: 22px; }
+  #board-section { flex: 1 1 50%; min-width: 0; }
+  #pieces-section { flex: 1 1 38%; min-width: 0; }
+}
+</style>
+</head>
+<body>
+
+<div id="app">
+  <h1>🏰 Princess Puzzle! 👑</h1>
+  <div id="instructions">
+    <b>Click</b> a piece to select it &nbsp;|&nbsp; <b>click it again</b> or use the <b>← / → arrow keys</b> to turn it &nbsp;|&nbsp; <b>click</b> a board square to place it
+  </div>
+  <div id="game-area">
+    <div id="board-section">
+      <div id="board-label">🏰 Castle Board</div>
+      <div id="puzzle-board"></div>
+    </div>
+    <div id="pieces-section">
+      <div id="pieces-label">👑 Piece Pile</div>
+      <div id="pieces-pile"></div>
+    </div>
+  </div>
+  <div id="status">Pick a puzzle piece to start!</div>
+</div>
+
+<div id="win-screen">
+  <div id="win-box">
+    <h2>🎉 You Did It! 🎉</h2>
+    <p>All the princesses are together!<br>🍃 💎 ⭐ 🦋 🌸 🎀 💗 🪄 🌙</p>
+    <button id="play-again" onclick="initGame()">Play Again! 🔄</button>
+  </div>
+</div>
+
+<script>
+const COLS = 3, ROWS = 3, TOTAL = 9;
+const CELL_W = 130, CELL_H = 110;
+const TAB = 20;
+const PIECE_W = CELL_W + TAB*2;
+const PIECE_H = CELL_H + TAB*2;
+const WIN_IMAGE_DISPLAY_MS = 3600;
+
+const H_TABS = [[1,-1],[-1,1],[1,-1]];
+const V_TABS = [[-1,1,-1],[1,-1,1]];
+
+function getSides(row, col) {
+  let top = 0, right = 0, bottom = 0, left = 0;
+  if (row === 0) top = 0; else top = -V_TABS[row-1][col];
+  if (row === ROWS-1) bottom = 0; else bottom = V_TABS[row][col];
+  if (col === 0) left = 0; else left = -H_TABS[row][col-1];
+  if (col === COLS-1) right = 0; else right = H_TABS[row][col];
+  return { top, right, bottom, left };
+}
+
+function bumpSegment(p1, p2, dir, nx, ny) {
+  if (dir === 0) return `L ${p2.x} ${p2.y}`;
+  const dx = p2.x-p1.x, dy = p2.y-p1.y;
+  const len = Math.hypot(dx,dy);
+  const ux = dx/len, uy = dy/len;
+  const bulge = dir * TAB;
+  const s = (t) => ({x: p1.x + ux*len*t, y: p1.y + uy*len*t});
+  const P1 = s(0.5 - 0.15 - 0.12);
+  const P2 = s(0.5 - 0.12);
+  const P3 = s(0.5 + 0.12);
+  const P4 = s(0.5 + 0.15 + 0.12);
+  const knobLeft = { x: P2.x + nx*bulge, y: P2.y + ny*bulge };
+  const knobRight = { x: P3.x + nx*bulge, y: P3.y + ny*bulge };
+  let out = '';
+  out += `L ${P1.x} ${P1.y} `;
+  out += `C ${P1.x+nx*bulge*0.6} ${P1.y+ny*bulge*0.6} ${knobLeft.x-ux*len*0.08} ${knobLeft.y-uy*len*0.08} ${knobLeft.x} ${knobLeft.y} `;
+  out += `C ${knobLeft.x+ux*len*0.04} ${knobLeft.y+uy*len*0.04} ${knobRight.x-ux*len*0.04} ${knobRight.y-uy*len*0.04} ${knobRight.x} ${knobRight.y} `;
+  out += `C ${knobRight.x+ux*len*0.08} ${knobRight.y+uy*len*0.08} ${P4.x+nx*bulge*0.6} ${P4.y+ny*bulge*0.6} ${P4.x} ${P4.y} `;
+  out += `L ${p2.x} ${p2.y}`;
+  return out;
+}
+
+function piecePath(sides, w, h, tab) {
+  const { top, right, bottom, left } = sides;
+  const x0 = tab, y0 = tab, x1 = tab+w, y1 = tab+h;
+  const TL = {x:x0,y:y0}, TR = {x:x1,y:y0}, BR = {x:x1,y:y1}, BL = {x:x0,y:y1};
+  let d = `M ${TL.x} ${TL.y} `;
+  d += bumpSegment(TL, TR, top, 0, -1) + ' ';
+  d += bumpSegment(TR, BR, right, 1, 0) + ' ';
+  d += bumpSegment(BR, BL, bottom, 0, 1) + ' ';
+  d += bumpSegment(BL, TL, left, -1, 0) + ' ';
+  d += 'Z';
+  return d;
+}
+
+const SCENE_W = COLS * CELL_W;
+const SCENE_H = ROWS * CELL_H;
+
+function sceneBackground() {
+  return `
+    <rect x="0" y="0" width="${SCENE_W}" height="${SCENE_H*0.62}" fill="#cfe8fa"/>
+    <rect x="0" y="${SCENE_H*0.62}" width="${SCENE_W}" height="${SCENE_H*0.38}" fill="#8bc78f"/>
+    <circle cx="345" cy="38" r="22" fill="#FFF3B0" opacity="0.9"/>
+    <ellipse cx="60" cy="40" rx="40" ry="22" fill="white" opacity="0.85"/>
+    <ellipse cx="95" cy="48" rx="30" ry="18" fill="white" opacity="0.8"/>
+    <ellipse cx="230" cy="32" rx="36" ry="20" fill="white" opacity="0.75"/>
+    <rect x="120" y="${SCENE_H*0.42}" width="150" height="${SCENE_H*0.22}" fill="#cdb4db"/>
+    <rect x="105" y="${SCENE_H*0.34}" width="34" height="${SCENE_H*0.30}" fill="#b497c9"/>
+    <polygon points="105,${SCENE_H*0.34} 122,${SCENE_H*0.20} 139,${SCENE_H*0.34}" fill="#7c4fa3"/>
+    <rect x="250" y="${SCENE_H*0.34}" width="34" height="${SCENE_H*0.30}" fill="#b497c9"/>
+    <polygon points="250,${SCENE_H*0.34} 267,${SCENE_H*0.20} 284,${SCENE_H*0.34}" fill="#7c4fa3"/>
+    <rect x="178" y="${SCENE_H*0.30}" width="28" height="${SCENE_H*0.34}" fill="#c2a2d4"/>
+    <polygon points="178,${SCENE_H*0.30} 192,${SCENE_H*0.15} 206,${SCENE_H*0.30}" fill="#7c4fa3"/>
+    <rect x="190" y="${SCENE_H*0.14}" width="4" height="14" fill="#7c4fa3"/>
+    <polygon points="194,${SCENE_H*0.14} 204,${SCENE_H*0.17} 194,${SCENE_H*0.20}" fill="#ff6f91"/>
+    <rect x="0" y="${SCENE_H*0.72}" width="${SCENE_W}" height="10" fill="#6fae74" opacity="0.6"/>
+    <circle cx="40" cy="${SCENE_H*0.78}" r="8" fill="#ff6f91"/>
+    <circle cx="55" cy="${SCENE_H*0.8}" r="6" fill="#ffd166"/>
+    <circle cx="150" cy="${SCENE_H*0.79}" r="7" fill="#ff6f91"/>
+    <circle cx="300" cy="${SCENE_H*0.78}" r="8" fill="#ffd166"/>
+    <circle cx="320" cy="${SCENE_H*0.8}" r="6" fill="#ff6f91"/>
+  `;
+}
+
+function groundAnchor(cellX, cellY) {
+  return { gx: cellX + CELL_W*0.5, gy: cellY + CELL_H*0.78 };
+}
+
+function hairMarkup(style, cx, headCY, headR, color) {
+  const capRX = headR+5, capRY = headR+7;
+  switch (style) {
+    case 'long': return `
+      <ellipse cx="${cx}" cy="${headCY-1}" rx="${capRX}" ry="${capRY}" fill="${color}"/>
+      <path d="M ${cx-capRX} ${headCY} Q ${cx-capRX-4} ${headCY+45} ${cx-capRX+6} ${headCY+60} L ${cx-capRX+14} ${headCY+58} Q ${cx-capRX+6} ${headCY+30} ${cx-capRX+10} ${headCY} Z" fill="${color}"/>
+      <path d="M ${cx+capRX} ${headCY} Q ${cx+capRX+4} ${headCY+45} ${cx+capRX-6} ${headCY+60} L ${cx+capRX-14} ${headCY+58} Q ${cx+capRX-6} ${headCY+30} ${cx+capRX-10} ${headCY} Z" fill="${color}"/>`;
+    case 'braid': return `
+      <ellipse cx="${cx}" cy="${headCY-1}" rx="${capRX}" ry="${capRY}" fill="${color}"/>
+      <rect x="${cx+capRX-6}" y="${headCY+4}" width="9" height="10" rx="4" fill="${color}"/>
+      <rect x="${cx+capRX-4}" y="${headCY+13}" width="9" height="10" rx="4" fill="${color}"/>
+      <rect x="${cx+capRX-6}" y="${headCY+22}" width="9" height="10" rx="4" fill="${color}"/>
+      <rect x="${cx+capRX-4}" y="${headCY+31}" width="8" height="9" rx="4" fill="${color}"/>`;
+    case 'bun': return `
+      <ellipse cx="${cx}" cy="${headCY+1}" rx="${capRX}" ry="${capRY}" fill="${color}"/>
+      <circle cx="${cx}" cy="${headCY-headR-6}" r="7" fill="${color}"/>`;
+    case 'pigtails': return `
+      <ellipse cx="${cx}" cy="${headCY-1}" rx="${capRX}" ry="${capRY-2}" fill="${color}"/>
+      <circle cx="${cx-capRX-2}" cy="${headCY+6}" r="8" fill="${color}"/>
+      <circle cx="${cx+capRX+2}" cy="${headCY+6}" r="8" fill="${color}"/>`;
+    case 'bob': return `
+      <path d="M ${cx-capRX} ${headCY-4} Q ${cx} ${headCY-capRY-4} ${cx+capRX} ${headCY-4} L ${cx+capRX-2} ${headCY+18} L ${cx-capRX+2} ${headCY+18} Z" fill="${color}"/>`;
+    case 'curly': return `
+      <ellipse cx="${cx}" cy="${headCY-1}" rx="${capRX}" ry="${capRY}" fill="${color}"/>
+      <circle cx="${cx-capRX}" cy="${headCY+4}" r="6" fill="${color}"/>
+      <circle cx="${cx+capRX}" cy="${headCY+4}" r="6" fill="${color}"/>
+      <circle cx="${cx-capRX+4}" cy="${headCY+14}" r="5" fill="${color}"/>
+      <circle cx="${cx+capRX-4}" cy="${headCY+14}" r="5" fill="${color}"/>`;
+    case 'ponytail': return `
+      <ellipse cx="${cx}" cy="${headCY-1}" rx="${capRX}" ry="${capRY}" fill="${color}"/>
+      <path d="M ${cx+capRX-3} ${headCY-2} Q ${cx+capRX+18} ${headCY+10} ${cx+capRX+6} ${headCY+38} L ${cx+capRX-4} ${headCY+34} Q ${cx+capRX+6} ${headCY+10} ${cx+capRX-8} ${headCY+2} Z" fill="${color}"/>`;
+    case 'updo': return `
+      <ellipse cx="${cx}" cy="${headCY+1}" rx="${capRX}" ry="${capRY-3}" fill="${color}"/>
+      <circle cx="${cx-4}" cy="${headCY-headR-5}" r="6" fill="${color}"/>
+      <circle cx="${cx+5}" cy="${headCY-headR-7}" r="6" fill="${color}"/>`;
+    default: return `<ellipse cx="${cx}" cy="${headCY-1}" rx="${capRX}" ry="${capRY}" fill="${color}"/>`;
+  }
+}
+
+function crownMarkup(cx, headCY, headR, crownColor, gemColor) {
+  const topY = headCY - headR - 2;
+  return `<path d="M ${cx-12} ${topY+8} L ${cx-12} ${topY} L ${cx-6} ${topY+6} L ${cx} ${topY-6} L ${cx+6} ${topY+6} L ${cx+12} ${topY} L ${cx+12} ${topY+8} Z" fill="${crownColor}" stroke="#b8860b" stroke-width="0.6"/>
+  <circle cx="${cx}" cy="${topY+2}" r="2" fill="${gemColor}"/>`;
+}
+
+function accessoryMarkup(type, cx, yy, color) {
+  const x = cx + 22;
+  switch (type) {
+    case 'flower': return `
+      <circle cx="${x}" cy="${yy}" r="3" fill="#FFEB3B"/>
+      <circle cx="${x-4}" cy="${yy-2}" r="3" fill="${color}"/>
+      <circle cx="${x+4}" cy="${yy-2}" r="3" fill="${color}"/>
+      <circle cx="${x-4}" cy="${yy+3}" r="3" fill="${color}"/>
+      <circle cx="${x+4}" cy="${yy+3}" r="3" fill="${color}"/>`;
+    case 'gem': return `<polygon points="${x},${yy-6} ${x+5},${yy} ${x},${yy+6} ${x-5},${yy}" fill="${color}"/>`;
+    case 'star': return `<path d="M ${x} ${yy-6} L ${x+2} ${yy-1} L ${x+6} ${yy-1} L ${x+3} ${yy+2} L ${x+4} ${yy+6} L ${x} ${yy+3} L ${x-4} ${yy+6} L ${x-3} ${yy+2} L ${x-6} ${yy-1} L ${x-2} ${yy-1} Z" fill="${color}"/>`;
+    case 'butterfly': return `
+      <ellipse cx="${x-3}" cy="${yy-2}" rx="4" ry="3" fill="${color}"/>
+      <ellipse cx="${x+3}" cy="${yy-2}" rx="4" ry="3" fill="${color}"/>
+      <ellipse cx="${x-3}" cy="${yy+3}" rx="3" ry="2.5" fill="${color}" opacity="0.8"/>
+      <ellipse cx="${x+3}" cy="${yy+3}" rx="3" ry="2.5" fill="${color}" opacity="0.8"/>
+      <rect x="${x-0.7}" y="${yy-4}" width="1.4" height="9" fill="#333"/>`;
+    case 'bow': return `
+      <polygon points="${x-6},${yy-4} ${x},${yy} ${x-6},${yy+4}" fill="${color}"/>
+      <polygon points="${x+6},${yy-4} ${x},${yy} ${x+6},${yy+4}" fill="${color}"/>
+      <circle cx="${x}" cy="${yy}" r="2" fill="${color}"/>`;
+    case 'heart': return `<path d="M ${x} ${yy+5} C ${x-8} ${yy-3} ${x-3} ${yy-9} ${x} ${yy-4} C ${x+3} ${yy-9} ${x+8} ${yy-3} ${x} ${yy+5} Z" fill="${color}"/>`;
+    case 'wand': return `
+      <rect x="${x-1}" y="${yy-2}" width="2" height="16" fill="#D4AF37" transform="rotate(20 ${x} ${yy})"/>
+      <path d="M ${x} ${yy-8} L ${x+1.5} ${yy-4} L ${x+5.5} ${yy-4} L ${x+2.5} ${yy-1.5} L ${x+3.5} ${yy+2.5} L ${x} ${yy} L ${x-3.5} ${yy+2.5} L ${x-2.5} ${yy-1.5} L ${x-5.5} ${yy-4} L ${x-1.5} ${yy-4} Z" fill="${color}"/>`;
+    case 'leaf': return `
+      <path d="M ${x-5} ${yy+5} Q ${x-2} ${yy-7} ${x+5} ${yy-5} Q ${x+2} ${yy+3} ${x-5} ${yy+5} Z" fill="${color}"/>
+      <line x1="${x-4}" y1="${yy+4}" x2="${x+3}" y2="${yy-4}" stroke="#1b5e20" stroke-width="0.8"/>`;
+    case 'moon': return `<path d="M ${x+4} ${yy-6} A 6 6 0 1 0 ${x+4} ${yy+6} A 4.5 4.5 0 1 1 ${x+4} ${yy-6} Z" fill="${color}"/>`;
+    default: return '';
+  }
+}
+
+const PRINCESS_DATA = [
+  { name:'Hazel',      skin:'#F5C28D', hair:'#6B3A1F', hairStyle:'braid',    dress:'#2ECC71', dress2:'#239B56', crown:'#FFD700', accessory:'leaf',      accessoryColor:'#27AE60' },
+  { name:'Opal',       skin:'#FFE0BD', hair:'#E8E8E8', hairStyle:'updo',     dress:'#B39DDB', dress2:'#8E6FC4', crown:'#C0C0C0', accessory:'gem',       accessoryColor:'#9C27B0' },
+  { name:'Marigold',   skin:'#FCE3C4', hair:'#F4D03F', hairStyle:'pigtails', dress:'#F1C40F', dress2:'#D4AC0D', crown:'#FFD700', accessory:'star',      accessoryColor:'#F39C12' },
+  { name:'Sapphire',   skin:'#8D5524', hair:'#1B1B1B', hairStyle:'long',     dress:'#2980B9', dress2:'#1F618D', crown:'#FFD700', accessory:'butterfly', accessoryColor:'#3498DB' },
+  { name:'Clementine', skin:'#FFDAB9', hair:'#E67E22', hairStyle:'curly',    dress:'#FF7F50', dress2:'#E5572D', crown:'#FFD700', accessory:'flower',    accessoryColor:'#FF6F91' },
+  { name:'Willow',     skin:'#C68642', hair:'#4E342E', hairStyle:'bun',      dress:'#81C784', dress2:'#4F9E5A', crown:'#C0C0C0', accessory:'bow',       accessoryColor:'#388E3C' },
+  { name:'Juniper',    skin:'#6B4226', hair:'#2C1B0E', hairStyle:'ponytail', dress:'#7986CB', dress2:'#5C6BC0', crown:'#FFD700', accessory:'heart',     accessoryColor:'#E91E63' },
+  { name:'Posy',       skin:'#FFE5D4', hair:'#FF8FB1', hairStyle:'bob',      dress:'#FF4FA0', dress2:'#D6336C', crown:'#FFD700', accessory:'wand',      accessoryColor:'#FFD54F' },
+  { name:'Aspen',      skin:'#FFF0DB', hair:'#B5651D', hairStyle:'long',     dress:'#5E35B1', dress2:'#4527A0', crown:'#C0C0C0', accessory:'moon',      accessoryColor:'#7E57C2' },
+];
+
+const PRINCESS_NAMES = PRINCESS_DATA.map(p => p.name);
+const PRINCESS_EMOJI = ['🍃','💎','⭐','🦋','🌸','🎀','💗','🪄','🌙'];
+
+function princessArt(idx, cellX, cellY) {
+  const data = PRINCESS_DATA[idx];
+  const { gx, gy } = groundAnchor(cellX, cellY);
+  const cx = gx;
+  const footY = gy + 24.2;
+  const hemY = footY;
+  const hemHalfW = 30;
+  const waistY = footY - 46;
+  const waistHalfW = 13;
+  const bodiceTopY = waistY - 16;
+  const neckY = bodiceTopY - 3;
+  const headR = 13;
+  const headCY = neckY - headR - 2;
+
+  const dressPath = `<path d="M ${cx-waistHalfW} ${waistY} L ${cx-hemHalfW} ${hemY-10} Q ${cx-hemHalfW*0.66} ${hemY+6} ${cx-hemHalfW*0.33} ${hemY-10} Q ${cx} ${hemY+6} ${cx+hemHalfW*0.33} ${hemY-10} Q ${cx+hemHalfW*0.66} ${hemY+6} ${cx+hemHalfW} ${hemY-10} L ${cx+waistHalfW} ${waistY} Z" fill="${data.dress}"/>`;
+  const sashPath = `<path d="M ${cx-4} ${waistY} L ${cx-7} ${hemY-6} L ${cx+7} ${hemY-6} L ${cx+4} ${waistY} Z" fill="${data.dress2}" opacity="0.7"/>`;
+  const bodicePath = `<path d="M ${cx-10} ${neckY} L ${cx-waistHalfW} ${waistY} L ${cx+waistHalfW} ${waistY} L ${cx+10} ${neckY} Z" fill="${data.dress}"/>`;
+
+  return `
+    ${dressPath}
+    ${sashPath}
+    <circle cx="${cx-12}" cy="${neckY+2}" r="6" fill="${data.dress2}"/>
+    <circle cx="${cx+12}" cy="${neckY+2}" r="6" fill="${data.dress2}"/>
+    ${bodicePath}
+    <rect x="${cx-4}" y="${neckY-5}" width="8" height="8" fill="${data.skin}"/>
+    ${hairMarkup(data.hairStyle, cx, headCY, headR, data.hair)}
+    <circle cx="${cx}" cy="${headCY}" r="${headR}" fill="${data.skin}"/>
+    <circle cx="${cx-5}" cy="${headCY-1}" r="2" fill="#2c2c2c"/>
+    <circle cx="${cx+5}" cy="${headCY-1}" r="2" fill="#2c2c2c"/>
+    <path d="M ${cx-5} ${headCY+6} Q ${cx} ${headCY+9} ${cx+5} ${headCY+6}" stroke="#c0392b" stroke-width="1.3" fill="none" stroke-linecap="round"/>
+    <circle cx="${cx-9}" cy="${headCY+3}" r="2.5" fill="#ff9aa2" opacity="0.55"/>
+    <circle cx="${cx+9}" cy="${headCY+3}" r="2.5" fill="#ff9aa2" opacity="0.55"/>
+    ${crownMarkup(cx, headCY, headR, data.crown, data.accessoryColor)}
+    ${accessoryMarkup(data.accessory, cx, waistY+8, data.accessoryColor)}
+  `;
+}
+
+let slotAssignment = [];
+
+function sceneBackgroundAndPrincesses() {
+  let inner = sceneBackground();
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++) {
+      const slot = r*COLS+c;
+      const cellX = c*CELL_W, cellY = r*CELL_H;
+      inner += princessArt(slotAssignment[slot], cellX, cellY);
+    }
+  return inner;
+}
+
+function makePieceSVG(slot) {
+  const row = Math.floor(slot / COLS);
+  const col = slot % COLS;
+  const sides = getSides(row, col);
+  const T = TAB;
+  const pathD = piecePath(sides, CELL_W, CELL_H, T);
+  const clipId = `clip-${slot}-${Math.random().toString(36).slice(2,7)}`;
+  const sceneContent = sceneBackgroundAndPrincesses();
+  const imgX = -col*CELL_W + T;
+  const imgY = -row*CELL_H + T;
+
+  return `<svg class="piece-svg" viewBox="0 0 ${PIECE_W} ${PIECE_H}" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <clipPath id="${clipId}">
+        <path d="${pathD}"/>
+      </clipPath>
+    </defs>
+    <g clip-path="url(#${clipId})">
+      <g transform="translate(${imgX},${imgY})">
+        ${sceneContent}
+      </g>
+    </g>
+    <path d="${pathD}" fill="none" stroke="rgba(0,0,0,0.45)" stroke-width="1.5"/>
+  </svg>`;
+}
+
+let pieces = [];
+let boardState = Array(TOTAL).fill(null);
+let selectedPiece = null;
+let correctPlacements = 0;
+
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+function playChime() {
+  [523,659,784,1047].forEach((f,i) => {
+    const osc = audioCtx.createOscillator(), g = audioCtx.createGain();
+    osc.connect(g); g.connect(audioCtx.destination);
+    osc.frequency.value = f; osc.type = 'sine';
+    const t = audioCtx.currentTime + i*0.18;
+    g.gain.setValueAtTime(0.4,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.5);
+    osc.start(t); osc.stop(t+0.5);
+  });
+}
+
+function playThud() {
+  const buf = audioCtx.createBuffer(1, audioCtx.sampleRate*0.35, audioCtx.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*Math.pow(1-i/d.length,3);
+  const src = audioCtx.createBufferSource(), g = audioCtx.createGain(), f = audioCtx.createBiquadFilter();
+  f.type='lowpass'; f.frequency.value=140;
+  src.buffer=buf; src.connect(f); f.connect(g); g.connect(audioCtx.destination);
+  g.gain.setValueAtTime(3.2,audioCtx.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+0.35);
+  src.start(); src.stop(audioCtx.currentTime+0.35);
+}
+
+function playHappySong() {
+  const notes=[[523,0],[659,.25],[784,.5],[1047,.75],[784,1],[659,1.25],[1047,1.5],[1175,1.75],[1047,2],[784,2.25],[659,2.5],[523,2.75],[784,3],[523,3.25],[659,3.5],[784,3.75],[523,4]];
+  notes.forEach(([freq,time]) => {
+    const osc=audioCtx.createOscillator(), g=audioCtx.createGain();
+    osc.connect(g); g.connect(audioCtx.destination);
+    osc.frequency.value=freq; osc.type='triangle';
+    const t=audioCtx.currentTime+time;
+    g.gain.setValueAtTime(0.35,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.22);
+    osc.start(t); osc.stop(t+0.25);
+  });
+}
+
+function shuffle(arr) {
+  for(let i=arr.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[arr[i],arr[j]]=[arr[j],arr[i]];}
+  return arr;
+}
+
+function initGame() {
+  document.getElementById('win-screen').classList.remove('show');
+  selectedPiece = null; correctPlacements = 0;
+  boardState = Array(TOTAL).fill(null);
+  slotAssignment = shuffle([...Array(TOTAL).keys()]);
+  const order = shuffle([...Array(TOTAL).keys()]);
+  pieces = order.map(slot => ({
+    pieceIdx: slot,
+    rotation: Math.floor(Math.random()*4),
+    inPile: true
+  }));
+  renderBoard();
+  renderPile();
+  setStatus('Pick a puzzle piece to start!');
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      renderPile();
+    });
+  });
+}
+
+function setStatus(msg) { document.getElementById('status').textContent = msg; }
+
+function showWinImage() {
+  const board = document.getElementById('puzzle-board');
+  const svgW = SCENE_W, svgH = SCENE_H;
+  board.innerHTML = `<svg width="100%" viewBox="0 0 ${svgW} ${svgH}" xmlns="http://www.w3.org/2000/svg" style="display:block;border-radius:8px">
+    ${sceneBackgroundAndPrincesses()}
+    ${Array.from({length:TOTAL},(_,i)=>{
+      const row=Math.floor(i/COLS), col=i%COLS;
+      const sides=getSides(row,col);
+      const ox=col*CELL_W, oy=row*CELL_H;
+      const pathDShifted=piecePath(sides,CELL_W,CELL_H,TAB);
+      return `<g transform="translate(${ox-TAB},${oy-TAB})">
+        <path d="${pathDShifted}" fill="none" stroke="rgba(255,255,255,0.5)" stroke-width="2"/>
+      </g>`;
+    }).join('')}
+  </svg>`;
+  board.style.padding = '0';
+  board.style.background = 'transparent';
+}
+
+function renderBoard() {
+  const board = document.getElementById('puzzle-board');
+  board.style.padding = '8px';
+  board.style.background = '#4a2c5e';
+  const boardW = SCENE_W + 16;
+  const boardH = SCENE_H + 16;
+  board.style.width = '100%';
+  board.style.aspectRatio = `${boardW}/${boardH}`;
+  board.innerHTML = '';
+
+  const wrapper = document.createElement('div');
+  wrapper.style.cssText = `position:relative;width:100%;padding-top:${(boardH/boardW*100).toFixed(3)}%`;
+  const inner = document.createElement('div');
+  inner.style.cssText = 'position:absolute;top:8px;left:8px;right:8px;bottom:8px;';
+
+  for (let i = 0; i < TOTAL; i++) {
+    const row = Math.floor(i/COLS), col = i%COLS;
+    const slot = document.createElement('div');
+    const leftPct = (col*CELL_W / SCENE_W) * 100;
+    const topPct = (row*CELL_H / SCENE_H) * 100;
+    const wPct = (CELL_W / SCENE_W) * 100;
+    const hPct = (CELL_H / SCENE_H) * 100;
+    slot.className = 'board-slot';
+    slot.style.cssText = `left:${leftPct}%;top:${topPct}%;width:${wPct}%;height:${hPct}%;border:2px dashed rgba(255,255,255,0.25);border-radius:3px;`;
+    slot.addEventListener('click', () => onBoardClick(i));
+    slot.addEventListener('contextmenu', e => { e.preventDefault(); onBoardClick(i); });
+    inner.appendChild(slot);
+
+    if (boardState[i] !== null) {
+      const p = pieces[boardState[i]];
+      const pieceLeftPct = ((col*CELL_W - TAB) / SCENE_W) * 100;
+      const pieceTopPct = ((row*CELL_H - TAB) / SCENE_H) * 100;
+      const pieceWPct = (PIECE_W / SCENE_W) * 100;
+      const pieceHPct = (PIECE_H / SCENE_H) * 100;
+      const pieceDiv = document.createElement('div');
+      pieceDiv.style.cssText = `position:absolute;left:${pieceLeftPct}%;top:${pieceTopPct}%;width:${pieceWPct}%;height:${pieceHPct}%;pointer-events:none;`;
+      pieceDiv.innerHTML = makePieceSVG(p.pieceIdx).replace('class="piece-svg"', 'style="display:block;width:100%;height:100%;"');
+      inner.appendChild(pieceDiv);
+
+      const ring = document.createElement('div');
+      ring.style.cssText = `position:absolute;left:${leftPct}%;top:${topPct}%;width:${wPct}%;height:${hPct}%;border:2px solid rgba(224,86,160,0.55);border-radius:3px;pointer-events:none;`;
+      inner.appendChild(ring);
+    }
+  }
+  wrapper.appendChild(inner);
+  board.appendChild(wrapper);
+}
+
+function renderPile() {
+  const pile = document.getElementById('pieces-pile');
+  pile.innerHTML = '';
+  pieces.forEach((piece, idx) => {
+    if (!piece.inPile) return;
+    const wrapper = document.createElement('div');
+    wrapper.className = 'piece-wrapper' + (selectedPiece === idx ? ' selected' : '');
+    wrapper.style.transform = `rotate(${piece.rotation * 90}deg)`;
+    wrapper.innerHTML = makePieceSVG(piece.pieceIdx);
+    wrapper.addEventListener('click', e => { e.stopPropagation(); onPieceClick(idx); });
+    wrapper.addEventListener('contextmenu', e => { e.preventDefault(); e.stopPropagation(); onPieceClick(idx); });
+    pile.appendChild(wrapper);
+  });
+}
+
+function onPieceClick(idx) {
+  audioCtx.resume();
+  if (selectedPiece === idx) {
+    rotateSelected(1); // clicking the already-selected piece turns it clockwise
+    return;
+  }
+  selectedPiece = idx;
+  const slot = pieces[idx].pieceIdx;
+  const princessIdx = slotAssignment[slot];
+  setStatus(`Selected: ${PRINCESS_EMOJI[princessIdx]} ${PRINCESS_NAMES[princessIdx]} — click it again or use the arrow keys to turn it, then click a board square!`);
+  renderPile();
+}
+
+function rotateSelected(direction) {
+  audioCtx.resume();
+  if (selectedPiece === null) { setStatus('Pick a puzzle piece first!'); return; }
+  pieces[selectedPiece].rotation = (pieces[selectedPiece].rotation + direction + 4) % 4;
+  setStatus('Turned! Click a board square to place it.');
+  renderPile();
+}
+
+function onBoardClick(slot) {
+  audioCtx.resume();
+  if (selectedPiece === null) { setStatus('First pick a puzzle piece from the pile!'); return; }
+  const piece = pieces[selectedPiece];
+  const correctSlot = piece.pieceIdx;
+  if (correctSlot === slot && piece.rotation === 0) {
+    boardState[slot] = selectedPiece;
+    piece.inPile = false;
+    correctPlacements++;
+    playChime();
+    setStatus(`✅ Perfect fit!`);
+    selectedPiece = null;
+    renderPile();
+    renderBoard();
+    if (correctPlacements === TOTAL) {
+      setTimeout(() => {
+        showWinImage();
+        playHappySong();
+        setTimeout(() => document.getElementById('win-screen').classList.add('show'), WIN_IMAGE_DISPLAY_MS);
+      }, 400);
+    }
+  } else {
+    playThud();
+    const hints = [];
+    if (correctSlot !== slot) hints.push('wrong square');
+    if (piece.rotation !== 0) hints.push('needs turning');
+    setStatus(`❌ ${hints.join(' and ')}! Try again.`);
+  }
+}
+
+document.addEventListener('keydown', (e) => {
+  if (selectedPiece === null) return;
+  if (e.key === 'ArrowRight') {
+    e.preventDefault();
+    rotateSelected(1); // right arrow = clockwise
+  } else if (e.key === 'ArrowLeft') {
+    e.preventDefault();
+    rotateSelected(-1); // left arrow = counter-clockwise
+  }
+});
+
+initGame();
+</script>
+</body>
+</html>
