@@ -1,0 +1,2 @@
+# Pap Games agent
+I have been creating games that are single html pages. I need to bundle all of these html files and I want to do it with a NGINX container. All of the games are defined are defined in GAMES.md. I will be updating that file regularly. The main job of this agent should be (1) create an index html page to act as a menu for all of my games and (2) create and maintain the NGINX container with all of the declared games and the menu page.
